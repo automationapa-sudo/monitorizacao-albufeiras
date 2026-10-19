@@ -1,0 +1,1498 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Monitorização de Albufeiras - APA | Mapa</title>
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <style>
+        :root {
+            /* Paleta APA (apambiente.pt) */
+            --apa-teal: #00b2a9;
+            --apa-teal-dark: #006460;
+            --apa-teal-ink: #00756f;   /* verde-água legível sobre branco */
+            --apa-teal-soft: #e5f6f5;
+            --apa-teal-light: #86cfce;
+            --apa-green: #a1d884;
+
+            --bg: #f2f6f6;
+            --surface: #ffffff;
+            --surface-soft: #f7fafa;
+            --text: #1f2d2d;
+            --muted: #5f6f6f;
+            --muted-2: #94a3a3;
+            --line: #dfe7e7;
+            --navy: var(--apa-teal-dark);
+            --primary: var(--apa-teal-ink);
+            --warn: #b45309;
+            --warn-bg: #fef3c7;
+            --radius: 14px;
+            --shadow-sm: 0 1px 2px rgba(15, 23, 42, .04), 0 4px 14px rgba(15, 23, 42, .05);
+            --shadow-md: 0 10px 30px rgba(15, 23, 42, .12);
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            padding-bottom: 32px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ---------- Cabeçalho ---------- */
+        .topbar {
+            background: linear-gradient(120deg, var(--apa-teal-dark) 0%, #00857e 60%, var(--apa-teal) 100%);
+            color: #fff;
+            padding: 16px 0;
+            margin-bottom: 18px;
+            border-bottom: 4px solid var(--apa-green);
+        }
+
+        .brand { display: flex; align-items: center; gap: 16px; }
+
+        .brand-icon {
+            width: 44px; height: 44px;
+            border-radius: 12px;
+            display: grid; place-items: center;
+            background: rgba(255, 255, 255, .14);
+            border: 1px solid rgba(255, 255, 255, .25);
+            font-size: 1.35rem;
+            flex-shrink: 0;
+        }
+
+        .topbar h1 {
+            margin: 0;
+            font-size: clamp(1.1rem, 1.8vw, 1.5rem);
+            font-weight: 800;
+            letter-spacing: -0.02em;
+        }
+
+        .topbar .sub { margin: 2px 0 0; opacity: .8; font-size: .88rem; }
+
+        .top-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+        .last-update {
+            font-size: .8rem;
+            opacity: .85;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .last-update.falha { opacity: 1; color: #fde68a; font-weight: 600; }
+
+        .btn-refresh {
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: .88rem;
+            padding: 8px 14px;
+            background: #fff;
+            color: var(--navy);
+            border: 0;
+        }
+        .btn-refresh:hover { background: var(--apa-teal-soft); color: var(--navy); }
+        .btn-refresh:disabled { background: #fff; color: var(--navy); opacity: .75; }
+
+        /* ---------- Barra de filtros ---------- */
+        .panel {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .toolbar { padding: 12px 14px; margin-bottom: 16px; }
+
+        .toolbar .form-label {
+            font-size: .7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            color: var(--muted);
+            margin-bottom: 4px;
+        }
+
+        .toolbar .form-control,
+        .toolbar .form-select,
+        .toolbar .input-group-text {
+            border-radius: 10px;
+            border: 1px solid var(--line);
+            min-height: 40px;
+            font-size: .9rem;
+            box-shadow: none !important;
+        }
+        .toolbar .input-group-text { border-right: 0; background: #fff; color: var(--muted); }
+        .toolbar .input-group .form-control { border-left: 0; }
+
+        .toolbar .form-control:focus,
+        .toolbar .form-select:focus {
+            border-color: var(--apa-teal);
+            box-shadow: 0 0 0 3px rgba(0, 178, 169, .15) !important;
+        }
+
+        /* ---------- Indicadores ---------- */
+        .kpi {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            padding: 14px 16px;
+            height: 100%;
+        }
+
+        .kpi-icon {
+            width: 38px; height: 38px;
+            border-radius: 10px;
+            display: grid; place-items: center;
+            font-size: 1.05rem;
+            flex-shrink: 0;
+            color: var(--c);
+            background: color-mix(in srgb, var(--c) 12%, white);
+        }
+
+        .kpi-body { min-width: 0; flex: 1; }
+
+        .kpi-label {
+            font-size: .7rem;
+            color: var(--muted);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+        }
+
+        .kpi-value {
+            font-size: 1.35rem;
+            font-weight: 800;
+            margin-top: 2px;
+            line-height: 1.15;
+            letter-spacing: -0.02em;
+        }
+        .kpi-value small { font-size: .78rem; color: var(--muted); font-weight: 700; margin-left: 2px; }
+
+        .kpi-sub { font-size: .76rem; color: var(--muted); margin-top: 3px; }
+        .kpi-sub .warn { color: var(--warn); font-weight: 600; }
+
+        .kpi-bar {
+            height: 6px;
+            border-radius: 999px;
+            background: #e9eef5;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+        .kpi-bar > div { height: 100%; border-radius: 999px; }
+
+        /* ---------- Layout ---------- */
+        .layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr);
+            gap: 16px;
+            align-items: start;
+        }
+        @media (max-width: 992px) {
+            .layout { grid-template-columns: minmax(0, 1fr); }
+        }
+
+        .section-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .section-head h2 { margin: 0; font-size: .98rem; font-weight: 800; letter-spacing: -0.01em; }
+        .section-head .meta { font-size: .82rem; color: var(--muted); }
+
+        /* ---------- Mapa ---------- */
+        .map-sticky { position: sticky; top: 16px; z-index: 1; }
+        @media (max-width: 992px) { .map-sticky { position: static; } }
+
+        .map-shell { position: relative; }
+
+        #map {
+            height: min(calc(100vh - 140px), 760px);
+            min-height: 480px;
+            border-radius: var(--radius);
+            border: 1px solid var(--line);
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+            background: #e5e7eb;
+        }
+        @media (max-width: 992px) { #map { height: 440px; min-height: 0; } }
+
+        body.no-scroll { overflow: hidden; }
+
+        .map-actions {
+            position: absolute;
+            top: 42px;
+            right: 10px;
+            z-index: 1100;
+        }
+
+        .btn-map {
+            width: 34px; height: 34px;
+            padding: 0;
+            border-radius: 8px;
+            background: #fff;
+            border: 1px solid var(--line);
+            box-shadow: 0 2px 8px rgba(15, 23, 42, .15);
+        }
+
+        .map-shell.is-fullscreen {
+            position: fixed;
+            inset: 0;
+            z-index: 2000;
+            padding: 16px;
+            background: rgba(15, 23, 42, .4);
+            backdrop-filter: blur(6px);
+        }
+        .map-shell.is-fullscreen .section-head { display: none; }
+        .map-shell.is-fullscreen #map { height: calc(100vh - 32px - 52px) !important; }
+        .map-shell.is-fullscreen .map-actions { top: 26px; right: 26px; }
+
+        /* Legenda fora do mapa, para nunca tapar pontos */
+        .map-legend {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 4px 14px;
+            margin-top: 8px;
+            padding: 8px 12px;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            box-shadow: var(--shadow-sm);
+            font-size: .74rem;
+            color: var(--text);
+        }
+        .map-legend .t { font-weight: 700; font-size: .66rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+        .map-legend .item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+        .map-legend .sw { width: 11px; height: 11px; border-radius: 50%; border: 1px solid rgba(15, 23, 42, .35); }
+        .map-legend .sw.stale { background: transparent; border: 2px dashed var(--warn); }
+        .map-legend .sep { width: 1px; height: 14px; background: var(--line); }
+        .map-legend .sw-rh { width: 16px; height: 11px; border-radius: 3px; border: 2px solid; }
+
+        .gmaps-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: .76rem;
+            font-weight: 600;
+            color: var(--apa-teal-ink);
+            text-decoration: none;
+        }
+        .gmaps-link:hover { color: var(--apa-teal-dark); text-decoration: underline; }
+        .pop .gmaps-link {
+            margin-top: 10px;
+            padding: 6px 10px;
+            border-radius: 8px;
+            background: var(--apa-teal-soft);
+            border: 1px solid #bfe8e5;
+        }
+        .pop .gmaps-link:hover { text-decoration: none; background: #d5f1ef; }
+
+        .leaflet-popup-content-wrapper { border-radius: 12px; box-shadow: var(--shadow-md); }
+        .leaflet-popup-content { margin: 0; font-family: 'Inter', sans-serif; }
+        .leaflet-tooltip { font-family: 'Inter', sans-serif; font-weight: 600; font-size: .76rem; border-radius: 6px; }
+
+        .pop { min-width: 260px; }
+        .pop-head { padding: 10px 14px 9px; border-top: 4px solid var(--cls); border-radius: 12px 12px 0 0; }
+        .pop-name { font-weight: 800; font-size: 1rem; }
+        .pop-ent { font-size: .76rem; color: var(--muted); }
+        .pop-body { padding: 0 14px 12px; font-size: .82rem; }
+        .pop-grid { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; }
+        .pop-grid dt { color: var(--muted); font-weight: 500; }
+        .pop-grid dd { margin: 0; font-weight: 700; text-align: right; }
+        .pop hr { margin: 8px 0; opacity: .12; }
+        .pop-note { margin-top: 8px; font-size: .74rem; color: var(--muted); }
+        .pop-note.warn { color: var(--warn); font-weight: 600; }
+
+        /* ---------- Cartões ---------- */
+        .cards-grid .col { display: flex; }
+
+        .card-alb {
+            width: 100%;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-left: 5px solid var(--cls);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-sm);
+            padding: 13px 14px 11px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            cursor: pointer;
+            transition: box-shadow .15s ease, transform .15s ease, border-color .15s ease;
+        }
+        .card-alb:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+        .card-alb.is-active { box-shadow: 0 0 0 3px rgba(0, 178, 169, .5), var(--shadow-md); }
+        .card-alb.is-stale { background: linear-gradient(180deg, #fffdf7 0%, #fff 60%); }
+
+        .card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+        .card-title { min-width: 0; }
+
+        .card-name {
+            margin: 0;
+            font-size: 1.02rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            line-height: 1.2;
+        }
+
+        .card-ent {
+            font-size: .74rem;
+            color: var(--muted);
+            margin-top: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .perc-chip {
+            flex-shrink: 0;
+            font-weight: 800;
+            font-size: .95rem;
+            padding: 4px 10px;
+            border-radius: 999px;
+            letter-spacing: -0.01em;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .bar {
+            height: 8px;
+            border-radius: 999px;
+            background: #e9eef5;
+            overflow: hidden;
+        }
+        .bar > div { height: 100%; border-radius: 999px; transition: width .35s ease; }
+
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            background: var(--surface-soft);
+        }
+        .metrics > div { padding: 7px 8px; text-align: center; min-width: 0; }
+        .metrics > div + div { border-left: 1px solid var(--line); }
+        .metrics span {
+            display: block;
+            font-size: .64rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: .04em;
+        }
+        .metrics b { font-size: .92rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+        .metrics b small { font-size: .66rem; color: var(--muted); font-weight: 700; margin-left: 2px; }
+
+        .flows-title {
+            font-size: .64rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: .04em;
+            margin-bottom: 3px;
+        }
+        .flows {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 4px;
+        }
+        .flows > div { text-align: center; min-width: 0; }
+        .flows span { display: block; font-size: .66rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .flows b { font-size: .82rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+        .card-foot {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding-top: 8px;
+            border-top: 1px dashed var(--line);
+            font-size: .74rem;
+            color: var(--muted);
+            margin-top: auto;
+        }
+        .tags { display: flex; gap: 5px; flex-wrap: wrap; }
+
+        .tag {
+            font-size: .68rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: var(--apa-teal-soft);
+            color: var(--apa-teal-ink);
+            border: 1px solid #bfe8e5;
+            white-space: nowrap;
+        }
+        .tag.warn { background: var(--warn-bg); color: var(--warn); border-color: #fde68a; }
+        .tag.mute { background: #f1f5f9; color: var(--muted); border-color: var(--line); }
+
+        .skeleton {
+            background: linear-gradient(90deg, #eef2f7 25%, #f8fafc 50%, #eef2f7 75%);
+            background-size: 200% 100%;
+            animation: pulseShine 1.2s infinite;
+            border-radius: 8px;
+        }
+        @keyframes pulseShine {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        .empty-state {
+            background: var(--surface);
+            border: 1px dashed #cbd5e1;
+            border-radius: var(--radius);
+            text-align: center;
+            padding: 28px 16px;
+            color: var(--muted);
+        }
+
+        .footer-note { color: var(--muted); font-size: .78rem; margin-top: 14px; }
+
+        @media (max-width: 576px) {
+            .topbar { padding: 14px 0; }
+            .kpi-value { font-size: 1.15rem; }
+            .kpi { padding: 12px; }
+            .kpi-icon { display: none; }
+            .map-legend { font-size: .7rem; gap: 4px 10px; }
+        }
+    </style>
+</head>
+<body>
+
+<header class="topbar">
+    <div class="container">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+            <div class="brand">
+                <div class="brand-icon"><i class="bi bi-water"></i></div>
+                <div>
+                    <h1>Monitorização de Albufeiras</h1>
+                    <p class="sub">ARH Alentejo — Níveis de armazenamento</p>
+                </div>
+            </div>
+
+            <div class="top-actions">
+                <div class="last-update" id="lastUpdate"><i class="bi bi-clock"></i><span>A carregar…</span></div>
+                <button id="btnRefresh" class="btn btn-refresh">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Atualizar
+                </button>
+            </div>
+        </div>
+    </div>
+</header>
+
+<div class="container">
+
+    <div class="panel toolbar">
+        <div class="row g-2 align-items-end">
+            <div class="col-12 col-md-6 col-lg-5">
+                <label class="form-label" for="searchInput">Pesquisar</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input id="searchInput" type="text" class="form-control" placeholder="Albufeira ou entidade">
+                </div>
+            </div>
+
+            <div class="col-6 col-md-2 col-lg-3">
+                <label class="form-label" for="sortSelect">Ordenar</label>
+                <select id="sortSelect" class="form-select">
+                    <option value="perc-desc">Enchimento (maior)</option>
+                    <option value="perc-asc">Enchimento (menor)</option>
+                    <option value="nome-asc">Nome (A-Z)</option>
+                    <option value="volume-desc">Volume (maior)</option>
+                </select>
+            </div>
+
+            <div class="col-6 col-md-2 col-lg-2">
+                <label class="form-label" for="statusFilter">Estado</label>
+                <select id="statusFilter" class="form-select">
+                    <option value="all">Todos</option>
+                    <option value="0_20">0-20</option>
+                    <option value="21_40">21-40</option>
+                    <option value="41_50">41-50</option>
+                    <option value="51_60">51-60</option>
+                    <option value="61_80">61-80</option>
+                    <option value="81_100">81-100</option>
+                    <option value="sem_dados">Sem dados</option>
+                    <option value="desatualizado">Desatualizadas</option>
+                </select>
+            </div>
+
+            <div class="col-12 col-md-2 col-lg-2">
+                <label class="form-label" for="rhFilter">RH</label>
+                <select id="rhFilter" class="form-select">
+                    <option value="all">Todos</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3" id="kpiRow"></div>
+
+    <div class="layout">
+        <div class="map-col">
+            <div class="map-sticky">
+                <div id="mapShell" class="map-shell">
+                    <div class="section-head">
+                        <h2>Mapa</h2>
+                        <div class="meta" id="mapInfo"></div>
+                    </div>
+
+                    <div class="map-actions">
+                        <button id="btnMapFullscreen" class="btn btn-map" type="button" title="Ecrã inteiro">
+                            <i class="bi bi-arrows-fullscreen"></i>
+                        </button>
+                    </div>
+
+                    <div id="map"></div>
+                    <div class="map-legend" id="mapLegend"></div>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <div class="section-head">
+                <h2>Albufeiras</h2>
+                <div class="meta" id="resultsInfo">A carregar dados...</div>
+            </div>
+
+            <div id="loader" class="row row-cols-1 row-cols-md-2 g-3 cards-grid"></div>
+            <div id="dashboard" class="row row-cols-1 row-cols-md-2 g-3 cards-grid d-none"></div>
+
+            <div class="footer-note" id="footerNote"></div>
+        </div>
+    </div>
+
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="geo/rh6_rh7.js"></script>
+
+<script>
+    const API_URL = "https://script.google.com/macros/s/AKfycby1qQYHOCAf-I1hx7UxC-jeoKVPd5nkHurGmEPtlUn3ce7muz7M-dPqbMOi2rhj_FgE/exec";
+    const AUTO_REFRESH_MS = 30 * 60 * 1000;
+
+    // Acima deste enchimento assume-se vírgula deslocada no volume e tenta-se corrigir
+    const PERC_SUSPEITO = 105;
+    // Registos com mais dias do que isto são assinalados como desatualizados
+    const DIAS_DESATUALIZADO = 7;
+
+    const CAP_OFICIAL = {
+        "Vigia": 16.73, "Roxo": 96.31, "Abrilongo": 19.9, "Alvito": 132.5,
+        "Lucefecit": 10.2, "Monte da Rocha": 104.5, "Campilhas": 27.2,
+        "Fonte Serne": 5.15, "Monte Gato": 0.65, "Migueis": 0.94,
+        "Santa Clara": 485.0, "Corte Brique": 1.64, "Vale do Gaio": 63.0,
+        "Pego do Altar": 94.0, "Caia": 191.0, "Odivelas": 96.0,
+        "Beliche": 44.0, "Odeleite": 130.0, "Alqueva": 4150.0, "Pedrogão": 106.0,
+        "Monte Clérigo": 0.39, "Enxoé": 10.4,
+    };
+
+    const fmt2 = new Intl.NumberFormat('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fmt1 = new Intl.NumberFormat('pt-PT', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+    const el = {
+        searchInput: document.getElementById('searchInput'),
+        sortSelect: document.getElementById('sortSelect'),
+        statusFilter: document.getElementById('statusFilter'),
+        rhFilter: document.getElementById('rhFilter'),
+        resultsInfo: document.getElementById('resultsInfo'),
+        mapInfo: document.getElementById('mapInfo'),
+        lastUpdate: document.getElementById('lastUpdate'),
+        kpiRow: document.getElementById('kpiRow'),
+        loader: document.getElementById('loader'),
+        dashboard: document.getElementById('dashboard'),
+        btnRefresh: document.getElementById('btnRefresh'),
+        footerNote: document.getElementById('footerNote'),
+        mapShell: document.getElementById('mapShell'),
+        btnMapFullscreen: document.getElementById('btnMapFullscreen'),
+    };
+
+    let dadosBase = [];
+    let dadosVisiveis = [];
+    let autoRefreshTimer = null;
+    let carregando = false;
+    let ultimaAtualizacao = null;
+    let chaveAtiva = null;
+
+    let map = null;
+    let markersLayer = null;
+    let rhLayer = null;
+    const markerByKey = new Map();
+
+    // Regiões hidrográficas desenhadas no mapa (polígonos em geo/rh6_rh7.js)
+    const RH_INFO = {
+        RH6: { nome: 'Sado e Mira', cor: '#00756f' },
+        RH7: { nome: 'Guadiana',    cor: '#4f8f2f' }
+    };
+
+    const COLORS = {
+        "0_20":   "#c00000",
+        "21_40":  "#f08010",
+        "41_50":  "#f0e000",
+        "51_60":  "#a0e010",
+        "61_80":  "#00e0f0",
+        "81_100": "#0030a0"
+    };
+
+    // Cor do texto sobre cada cor de classe (legível em fundos claros e escuros)
+    const TEXT_ON = {
+        "0_20": "#ffffff", "21_40": "#1f2937", "41_50": "#1f2937",
+        "51_60": "#1f2937", "61_80": "#0f172a", "81_100": "#ffffff", "sem_dados": "#334155"
+    };
+
+    const LEGENDA_ESPECIAL = {
+        sem_dados: { key: "sem_dados", label: "Sem dados", color: "#cbd5e1" }
+    };
+
+    function escapeHtml(v) {
+        return String(v ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function parseVal(v) {
+        if (v === "" || v === null || v === undefined || v === "N/A") return 0;
+        let s = String(v).replace(/[\s ]/g, '');
+        // "1.234,56" -> "1234.56"
+        if (s.includes(',') && s.includes('.')) s = s.replace(/\./g, '');
+        s = s.replace(',', '.');
+        return parseFloat(s) || 0;
+    }
+
+    function normRH(v) {
+        if (v === null || v === undefined) return '';
+        const s = String(v).trim();
+        if (!s || s.toLowerCase() === 'n/a') return '';
+        // A API envia só o número (6, 7): mostrar como RH6, RH7
+        if (/^\d+$/.test(s)) return `RH${s}`;
+        return s;
+    }
+
+    const pad2 = n => String(n).padStart(2, '0');
+
+    function criarData(ano, mes, dia) {
+        const d = new Date(ano, mes - 1, dia);
+        // rejeita datas impossíveis (ex.: 31/02) que o Date "corrige" sozinho
+        if (d.getFullYear() !== ano || d.getMonth() !== mes - 1 || d.getDate() !== dia) return null;
+        if (ano < 1900 || ano > 2100) return null;
+        return d;
+    }
+
+    // Cada entidade envia a data no seu formato. Regras:
+    //   aaaa-mm-dd (ISO)          -> ano primeiro é sempre ano-mês-dia
+    //   dd/mm/aaaa, dd-mm-aa, ... -> sem ano à frente, o dia vem sempre primeiro
+    //   dd/mm (sem ano)           -> ano corrente, ou o anterior se a data ficasse no futuro
+    function parseData(valor) {
+        if (valor === null || valor === undefined) return null;
+        const s0 = String(valor).trim();
+        if (!s0 || s0.toUpperCase() === 'N/A') return null;
+
+        // Date serializado pelo Apps Script (ex.: 2026-10-16T23:00:00.000Z): converter para hora local
+        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s0)) {
+            const d = new Date(s0);
+            if (!isNaN(d)) return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        }
+
+        const s = s0.split('T')[0].split(' ')[0];
+        let m;
+
+        if ((m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/))) {
+            return criarData(Number(m[1]), Number(m[2]), Number(m[3]));
+        }
+
+        if ((m = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2}|\d{4})$/))) {
+            let ano = Number(m[3]);
+            if (ano < 100) ano += 2000;
+            return criarData(ano, Number(m[2]), Number(m[1]));
+        }
+
+        if ((m = s.match(/^(\d{1,2})[-\/.](\d{1,2})$/))) {
+            const hoje = new Date();
+            const dia = Number(m[1]);
+            const mes = Number(m[2]);
+            let d = criarData(hoje.getFullYear(), mes, dia);
+            if (d && d > hoje) d = criarData(hoje.getFullYear() - 1, mes, dia);
+            return d;
+        }
+
+        return null;
+    }
+
+    function formatarData(d) {
+        return d ? `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}` : null;
+    }
+
+    function diasDesde(d) {
+        if (!d) return null;
+        const hoje = new Date();
+        const hojeMeiaNoite = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+        return Math.round((hojeMeiaNoite - d) / 86400000);
+    }
+
+    // Normaliza "8h", "8 h", "24h00", "10.00 h", "18", "07:42" para HH:MM
+    function formatarHoraCurta(hora) {
+        if (hora === null || hora === undefined) return "";
+        const original = String(hora).trim();
+        if (!original || original.toUpperCase() === "N/A") return "";
+
+        const m = original.toLowerCase().match(/^(\d{1,2})\s*(?:[h:.]\s*(\d{2})?)?\s*h?$/);
+        if (!m) return original;
+
+        const h = Number(m[1]);
+        const min = m[2] ? Number(m[2]) : 0;
+        if (h > 24 || min > 59) return original;
+        return `${pad2(h)}:${pad2(min)}`;
+    }
+
+    function getLegendByPerc(perc) {
+        if (!isFinite(perc)) perc = 0;
+
+        if (perc <= 20)  return { key: "0_20",   label: "0-20",   color: COLORS["0_20"] };
+        if (perc <= 40)  return { key: "21_40",  label: "21-40",  color: COLORS["21_40"] };
+        if (perc <= 50)  return { key: "41_50",  label: "41-50",  color: COLORS["41_50"] };
+        if (perc <= 60)  return { key: "51_60",  label: "51-60",  color: COLORS["51_60"] };
+        if (perc <= 80)  return { key: "61_80",  label: "61-80",  color: COLORS["61_80"] };
+        return            { key: "81_100", label: "81-100", color: COLORS["81_100"] };
+    }
+
+    function pickDescargaSuperficie(raw) {
+        return parseVal(raw.descarga_superficie ?? raw.superficie ?? raw.descargaSuperficie ?? raw.superficie_m3s);
+    }
+
+    function pickDescargaFundo(raw) {
+        return parseVal(raw.descarga_fundo ?? raw.fundo ?? raw.descargaFundo ?? raw.fundo_m3s);
+    }
+
+    function pickVolDescarregado(raw) {
+        const v = parseVal(raw.volume_descarregado ?? raw.volumeDescarregado);
+        if (v !== 0) return v;
+        return pickDescargaSuperficie(raw) + pickDescargaFundo(raw);
+    }
+
+    function pickRH(raw) {
+        return normRH(raw.RH ?? raw.rh ?? raw.arh ?? raw.ARH ?? raw.regiao_hidrografica ?? raw.regiaoHidrografica);
+    }
+
+    function getLatLng(raw) {
+        const lon = parseVal(raw.X ?? raw.x);
+        const lat = parseVal(raw.Y ?? raw.y);
+
+        if (!isFinite(lat) || !isFinite(lon) || lat === 0 || lon === 0) return null;
+        if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+        return { lat, lon };
+    }
+
+    function normalizar(item) {
+        const nome = item.albufeira || 'N/A';
+
+        let vol = parseVal(item.volume);
+        const capApi = parseVal(item.capacidade);
+
+        const capReal = CAP_OFICIAL[nome] || (capApi > 0 ? capApi : 1);
+        let volumeCorrigido = null;
+
+        // Valores grandes vêm normalmente em m³ (÷1 000 000, ex.: Vigia 5032500).
+        // Se isso der um enchimento irrisório (< 1 %) e ÷1000 der um valor plausível,
+        // o separador decimal perdeu-se (ex.: Caia "128.010" hm³ chega como 128010).
+        if (vol > 5000) {
+            const emM3 = vol / 1e6;
+            const semDecimal = vol / 1e3;
+            if ((emM3 / capReal) * 100 < 1 && (semDecimal / capReal) * 100 <= PERC_SUSPEITO) {
+                volumeCorrigido = { original: vol, fator: 1000 };
+                vol = semDecimal;
+            } else {
+                vol = emM3;
+            }
+        }
+
+        // Volume acima da capacidade: provável vírgula deslocada na origem
+        // (ex.: Santa Clara 4580.166 -> 458.0166 hm³). Usa o menor deslocamento plausível.
+        if (vol > 0 && (vol / capReal) * 100 > PERC_SUSPEITO) {
+            for (const fator of [10, 100, 1000]) {
+                if ((vol / fator / capReal) * 100 <= PERC_SUSPEITO) {
+                    volumeCorrigido = { original: vol, fator };
+                    vol = vol / fator;
+                    break;
+                }
+            }
+        }
+
+        let perc = (vol / capReal) * 100;
+        if (!isFinite(perc) || perc < 0) perc = 0;
+
+        let estado = 'ok';
+        if (vol <= 0) estado = 'sem_dados';
+
+        const legenda = estado === 'ok' ? getLegendByPerc(perc) : LEGENDA_ESPECIAL[estado];
+
+        const descargaSuperficie = pickDescargaSuperficie(item);
+        const descargaFundo = pickDescargaFundo(item);
+        const volumeDescarregado = pickVolDescarregado(item);
+
+        const rh = pickRH(item);
+        const ll = getLatLng(item);
+
+        const dataObj = parseData(item.data);
+        const dataExibicao = formatarData(dataObj);
+        const horaExibicao = formatarHoraCurta(item.hora);
+        const dataHora = dataExibicao
+            ? (horaExibicao ? `${dataExibicao} ${horaExibicao}` : dataExibicao)
+            : (item.data ? `${item.data} ${horaExibicao}`.trim() : (horaExibicao || "N/A"));
+
+        const idadeDias = diasDesde(dataObj);
+        const desatualizado = idadeDias !== null && idadeDias > DIAS_DESATUALIZADO;
+
+        return {
+            raw: item,
+            key: `${item.entidade || ''}||${nome}`,
+            nome,
+            entidade: item.entidade || 'N/A',
+            RH: rh,
+            dataExibicao,
+            horaExibicao,
+            dataHora,
+            idadeDias,
+            desatualizado,
+
+            volumeHm3: vol,
+            capacidadeHm3: capReal,
+            perc,
+            percBar: Math.max(0, Math.min(100, perc)),
+            estado,
+            volumeCorrigido,
+
+            cota: parseVal(item.cota),
+            afluencia: parseVal(item.afluencia),
+            descargaSuperficie,
+            descargaFundo,
+            volumeDescarregado,
+            observacoes: (item.observacoes ?? item.obs ?? item.observacao ?? "") ? String(item.observacoes ?? item.obs ?? item.observacao ?? "") : "",
+
+            legenda,
+            latLng: ll
+        };
+    }
+
+    // ---------- Apresentação ----------
+
+    function percTexto(item) {
+        return item.estado === 'sem_dados' ? '—' : `${fmt1.format(item.perc)}%`;
+    }
+
+    function corTexto(item) {
+        return TEXT_ON[item.legenda.key] || '#0f172a';
+    }
+
+    const m3s = v => `${fmt2.format(v)} m³/s`;
+
+    function googleMapsUrl(item) {
+        if (!item.latLng) return null;
+        const { lat, lon } = item.latLng;
+        return `https://www.google.com/maps/search/?api=1&query=${lat.toFixed(6)},${lon.toFixed(6)}`;
+    }
+
+    function criarSkeleton(qtd = 6) {
+        let html = '';
+        for (let i = 0; i < qtd; i++) {
+            html += `
+                <div class="col">
+                    <div class="card-alb" style="--cls:#e2e8f0; cursor:default">
+                        <div class="d-flex justify-content-between gap-3">
+                            <div class="flex-grow-1">
+                                <div class="skeleton" style="height:18px;width:60%;"></div>
+                                <div class="skeleton mt-2" style="height:12px;width:85%;"></div>
+                            </div>
+                            <div class="skeleton" style="height:28px;width:64px;border-radius:999px"></div>
+                        </div>
+                        <div class="skeleton" style="height:8px;width:100%;"></div>
+                        <div class="skeleton" style="height:46px;width:100%;"></div>
+                        <div class="skeleton" style="height:30px;width:100%;"></div>
+                        <div class="skeleton" style="height:14px;width:50%;"></div>
+                    </div>
+                </div>
+            `;
+        }
+        el.loader.innerHTML = html;
+    }
+
+    function cardHtml(item) {
+        const cor = item.legenda.color;
+        const cotaTxt = item.cota > 0 ? `${fmt2.format(item.cota)}<small>m</small>` : '—';
+        const volTxt = item.estado === 'sem_dados' ? '—' : `${fmt2.format(item.volumeHm3)}<small>hm³</small>`;
+
+        const tags = [
+            item.RH ? `<span class="tag">${escapeHtml(item.RH)}</span>` : '',
+            item.desatualizado
+                ? `<span class="tag warn" title="Último registo há mais de ${DIAS_DESATUALIZADO} dias"><i class="bi bi-clock-history me-1"></i>Há ${item.idadeDias} dias</span>`
+                : '',
+            item.latLng ? '' : `<span class="tag mute" title="Sem coordenadas"><i class="bi bi-geo-alt me-1"></i>Sem local</span>`
+        ].join('');
+
+        return `
+            <div class="col">
+                <article class="card-alb ${item.desatualizado ? 'is-stale' : ''} ${item.key === chaveAtiva ? 'is-active' : ''}"
+                         data-key="${escapeHtml(item.key)}" style="--cls:${cor}">
+                    <div class="card-top">
+                        <div class="card-title">
+                            <h3 class="card-name">${escapeHtml(item.nome)}</h3>
+                            <div class="card-ent" title="${escapeHtml(item.entidade)}">${escapeHtml(item.entidade)}</div>
+                        </div>
+                        <span class="perc-chip" style="background:${cor}; color:${corTexto(item)}">${percTexto(item)}</span>
+                    </div>
+
+                    <div class="bar"><div style="width:${item.percBar}%; background:${cor}"></div></div>
+
+                    <div class="metrics">
+                        <div><span>Volume</span><b>${volTxt}</b></div>
+                        <div><span>Capacidade</span><b>${fmt2.format(item.capacidadeHm3)}<small>hm³</small></b></div>
+                        <div><span>Cota</span><b>${cotaTxt}</b></div>
+                    </div>
+
+                    <div>
+                        <div class="flows-title">Caudais (m³/s)</div>
+                        <div class="flows">
+                            <div><span>Afluência</span><b>${fmt2.format(item.afluencia)}</b></div>
+                            <div><span title="Descarga de superfície">Desc. sup.</span><b>${fmt2.format(item.descargaSuperficie)}</b></div>
+                            <div><span title="Descarga de fundo">Desc. fundo</span><b>${fmt2.format(item.descargaFundo)}</b></div>
+                            <div><span title="Volume descarregado">Vol. desc.</span><b>${fmt2.format(item.volumeDescarregado)}</b></div>
+                        </div>
+                    </div>
+
+                    <div class="card-foot">
+                        <span><i class="bi bi-calendar3 me-1"></i>${escapeHtml(item.dataHora || 'N/A')}</span>
+                        <span class="tags">
+                            ${tags}
+                            ${item.latLng ? `<a class="gmaps-link" href="${googleMapsUrl(item)}" target="_blank" rel="noopener" title="Abrir no Google Maps" onclick="event.stopPropagation()"><i class="bi bi-box-arrow-up-right"></i>Google Maps</a>` : ''}
+                        </span>
+                    </div>
+                </article>
+            </div>
+        `;
+    }
+
+    function popupHtml(item) {
+        const cotaTxt = item.cota > 0 ? `${fmt2.format(item.cota)} m` : 'N/A';
+        const volTxt = item.estado === 'sem_dados' ? 'N/A' : `${fmt2.format(item.volumeHm3)} hm³`;
+
+        let notas = '';
+        if (item.desatualizado) {
+            notas += `<div class="pop-note warn"><i class="bi bi-clock-history me-1"></i>Desatualizado: último registo há ${item.idadeDias} dias</div>`;
+        }
+        if (item.estado === 'sem_dados') {
+            notas += `<div class="pop-note"><i class="bi bi-dash-circle me-1"></i>Sem volume reportado</div>`;
+        }
+        if (item.volumeCorrigido) {
+            const { original, fator } = item.volumeCorrigido;
+            notas += `<div class="pop-note"><i class="bi bi-pencil-square me-1"></i>Vírgula corrigida (÷${fator}): recebido ${escapeHtml(item.raw.volume)}, usado ${fmt2.format(original / fator)} hm³</div>`;
+        }
+
+        return `
+            <div class="pop">
+                <div class="pop-head" style="--cls:${item.legenda.color}">
+                    <div class="d-flex justify-content-between align-items-start gap-2">
+                        <div class="pop-name">${escapeHtml(item.nome)}</div>
+                        <span class="perc-chip" style="background:${item.legenda.color}; color:${corTexto(item)}; font-size:.82rem">${percTexto(item)}</span>
+                    </div>
+                    <div class="pop-ent">${escapeHtml(item.entidade)}</div>
+                </div>
+                <div class="pop-body">
+                    <dl class="pop-grid">
+                        <dt>Região hidrográfica</dt><dd>${item.RH ? escapeHtml(item.RH) : 'N/A'}</dd>
+                        <dt>Data</dt><dd>${escapeHtml(item.dataHora || 'N/A')}</dd>
+                    </dl>
+                    <hr>
+                    <dl class="pop-grid">
+                        <dt>Classe</dt><dd>${escapeHtml(item.legenda.label)}</dd>
+                        <dt>Volume</dt><dd>${volTxt}</dd>
+                        <dt>Capacidade</dt><dd>${fmt2.format(item.capacidadeHm3)} hm³</dd>
+                        <dt>Cota</dt><dd>${cotaTxt}</dd>
+                    </dl>
+                    <hr>
+                    <dl class="pop-grid">
+                        <dt>Afluência</dt><dd>${m3s(item.afluencia)}</dd>
+                        <dt>Desc. superfície</dt><dd>${m3s(item.descargaSuperficie)}</dd>
+                        <dt>Desc. fundo</dt><dd>${m3s(item.descargaFundo)}</dd>
+                        <dt>Vol. descarregado</dt><dd>${m3s(item.volumeDescarregado)}</dd>
+                    </dl>
+                    ${notas}
+                    <a class="gmaps-link" href="${googleMapsUrl(item)}" target="_blank" rel="noopener">
+                        <i class="bi bi-geo-alt-fill"></i>Abrir no Google Maps
+                        <span class="text-muted fw-normal">(${item.latLng.lat.toFixed(5)}, ${item.latLng.lon.toFixed(5)})</span>
+                    </a>
+                </div>
+            </div>
+        `;
+    }
+
+    function kpiHtml({ icon, cor, label, value, sub, extra = '' }) {
+        return `
+            <div class="col-6 col-xl-3">
+                <div class="panel kpi">
+                    <div class="kpi-icon" style="--c:${cor}"><i class="bi ${icon}"></i></div>
+                    <div class="kpi-body">
+                        <div class="kpi-label">${label}</div>
+                        <div class="kpi-value">${value}</div>
+                        ${extra}
+                        <div class="kpi-sub">${sub}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderKPIs(lista) {
+        if (!lista.length) { el.kpiRow.innerHTML = ''; return; }
+
+        const total = lista.length;
+        // Albufeiras sem dados não entram na média nem no total
+        const validos = lista.filter(x => x.estado === 'ok');
+        const excluidos = total - validos.length;
+        const media = validos.length ? validos.reduce((acc, x) => acc + x.perc, 0) / validos.length : 0;
+        const volumeTotal = validos.reduce((acc, x) => acc + x.volumeHm3, 0);
+        const capTotal = validos.reduce((acc, x) => acc + x.capacidadeHm3, 0);
+        const comCoord = lista.filter(x => x.latLng).length;
+        const desatualizadas = lista.filter(x => x.desatualizado).length;
+        const notaExcluidos = excluidos ? ` · ${excluidos} sem dados excluída(s)` : '';
+        const corMedia = getLegendByPerc(media).color;
+
+        el.kpiRow.innerHTML = [
+            kpiHtml({
+                icon: 'bi-collection', cor: '#00756f', label: 'Albufeiras',
+                value: total,
+                sub: desatualizadas ? `<span class="warn"><i class="bi bi-clock-history me-1"></i>${desatualizadas} desatualizada(s)</span>` : 'Todas atualizadas'
+            }),
+            kpiHtml({
+                icon: 'bi-droplet-half', cor: '#00a39b', label: 'Enchimento médio',
+                value: `${fmt1.format(media)}<small>%</small>`,
+                extra: `<div class="kpi-bar"><div style="width:${Math.min(100, media)}%; background:${corMedia}"></div></div>`,
+                sub: `Média da seleção${notaExcluidos}`
+            }),
+            kpiHtml({
+                icon: 'bi-water', cor: '#006460', label: 'Volume total',
+                value: `${fmt2.format(volumeTotal)}<small>hm³</small>`,
+                sub: `de ${fmt2.format(capTotal)} hm³ de capacidade${notaExcluidos}`
+            }),
+            kpiHtml({
+                icon: 'bi-geo-alt', cor: '#4f8f2f', label: 'No mapa',
+                value: `${comCoord}<small>/ ${total}</small>`,
+                sub: 'Com coordenadas (X,Y)'
+            })
+        ].join('');
+    }
+
+    function renderCards(lista) {
+        el.loader.classList.add('d-none');
+        el.dashboard.classList.remove('d-none');
+
+        if (!lista.length) {
+            el.dashboard.innerHTML = `
+                <div class="col-12">
+                    <div class="empty-state">
+                        <div style="font-size:1.4rem" class="mb-2"><i class="bi bi-search"></i></div>
+                        <div class="fw-bold text-dark">Sem resultados</div>
+                        <div class="small">Ajusta a pesquisa, o filtro ou a ordenação.</div>
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        el.dashboard.innerHTML = lista.map(cardHtml).join('');
+
+        el.dashboard.querySelectorAll('.card-alb').forEach(card => {
+            card.addEventListener('click', () => {
+                const key = card.getAttribute('data-key');
+                marcarAtivo(key);
+                focusPoint(key);
+            });
+        });
+    }
+
+    // Realça o cartão selecionado; vindo do mapa, traz o cartão para a vista
+    function marcarAtivo(key, { scroll = false } = {}) {
+        chaveAtiva = key;
+        let alvo = null;
+        el.dashboard.querySelectorAll('.card-alb').forEach(card => {
+            const ativo = card.getAttribute('data-key') === key;
+            card.classList.toggle('is-active', ativo);
+            if (ativo) alvo = card;
+        });
+        if (scroll && alvo && !window.matchMedia('(max-width: 992px)').matches) {
+            alvo.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+
+    function updateResultsInfo(lista) {
+        el.resultsInfo.textContent = `${lista.length} resultado(s)`;
+        const noMapa = lista.filter(x => x.latLng).length;
+        el.mapInfo.textContent = `${noMapa} ponto(s) · tamanho proporcional à capacidade`;
+    }
+
+    function updateFooter() {
+        ultimaAtualizacao = new Intl.DateTimeFormat('pt-PT', { dateStyle: 'short', timeStyle: 'short' }).format(new Date());
+        el.lastUpdate.classList.remove('falha');
+        el.lastUpdate.innerHTML = `<i class="bi bi-clock"></i><span>Atualizado ${escapeHtml(ultimaAtualizacao)}</span>`;
+        el.footerNote.textContent = `Última atualização do painel: ${ultimaAtualizacao} · Atualização automática a cada ${AUTO_REFRESH_MS / 60000} min`;
+    }
+
+    function preencherFiltroRH(listaNormalizada) {
+        const sel = el.rhFilter;
+        const atual = sel.value || 'all';
+
+        const valores = Array.from(new Set(
+            listaNormalizada.map(x => x.RH).filter(v => v && String(v).trim() !== '')
+        ));
+        valores.sort((a, b) => String(a).localeCompare(String(b), 'pt'));
+
+        let html = `<option value="all">Todos</option>`;
+        for (const v of valores) html += `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`;
+        sel.innerHTML = html;
+
+        const existe = Array.from(sel.options).some(o => o.value === atual);
+        sel.value = existe ? atual : 'all';
+    }
+
+    // enquadrar: reajustar o zoom aos pontos (só quando muda o conjunto filtrado)
+    function aplicarFiltros({ enquadrar = true } = {}) {
+        const q = el.searchInput.value.trim().toLowerCase();
+        const sort = el.sortSelect.value;
+        const statusFilter = el.statusFilter.value;
+        const rhFilter = el.rhFilter.value;
+
+        let lista = [...dadosBase];
+
+        if (q) {
+            lista = lista.filter(item =>
+                item.nome.toLowerCase().includes(q) ||
+                String(item.entidade).toLowerCase().includes(q)
+            );
+        }
+
+        if (rhFilter !== 'all') {
+            lista = lista.filter(item => String(item.RH) === String(rhFilter));
+        }
+
+        if (statusFilter === 'desatualizado') {
+            lista = lista.filter(item => item.desatualizado);
+        } else if (statusFilter !== 'all') {
+            lista = lista.filter(item => item.legenda.key === statusFilter);
+        }
+
+        // Sem dados ficam sempre no fim nas ordenações numéricas
+        const validosPrimeiro = (a, b) => (a.estado !== 'ok') - (b.estado !== 'ok');
+
+        switch (sort) {
+            case 'perc-asc':    lista.sort((a, b) => validosPrimeiro(a, b) || a.perc - b.perc); break;
+            case 'nome-asc':    lista.sort((a, b) => a.nome.localeCompare(b.nome, 'pt')); break;
+            case 'volume-desc': lista.sort((a, b) => validosPrimeiro(a, b) || b.volumeHm3 - a.volumeHm3); break;
+            case 'perc-desc':
+            default:            lista.sort((a, b) => validosPrimeiro(a, b) || b.perc - a.perc); break;
+        }
+
+        dadosVisiveis = lista;
+        renderKPIs(lista);
+        renderCards(lista);
+        updateResultsInfo(lista);
+        rebuildMapPoints(lista, { enquadrar });
+        atualizarEstiloRH();
+    }
+
+    // ---------- Mapa ----------
+
+    function legendaMapaHtml() {
+        const classes = Object.keys(COLORS).map(k =>
+            `<span class="item"><span class="sw" style="background:${COLORS[k]}"></span>${k.replace('_', '-')}%</span>`
+        ).join('');
+        return `
+            <span class="t">Enchimento</span>
+            ${classes}
+            <span class="item"><span class="sw" style="background:${LEGENDA_ESPECIAL.sem_dados.color}"></span>Sem dados</span>
+            <span class="sep"></span>
+            <span class="item"><span class="sw stale"></span>Desatualizada (&gt; ${DIAS_DESATUALIZADO} dias)</span>
+            <span class="sep"></span>
+            ${Object.entries(RH_INFO).map(([rh, info]) =>
+                `<span class="item"><span class="sw-rh" style="border-color:${info.cor}"></span>${rh} – ${info.nome}</span>`
+            ).join('')}
+        `;
+    }
+
+    function initMap() {
+        if (map) return;
+
+        map = L.map('map', { zoomControl: true });
+
+        const basemaps = {
+            'Mapa claro': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: 16,
+                attribution: 'Base &copy; Esri'
+            }),
+            'OpenStreetMap': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap'
+            }),
+            'Satélite': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: 19,
+                attribution: 'Imagery &copy; Esri'
+            })
+        };
+        basemaps['Mapa claro'].addTo(map);
+
+        // Polígonos das RH num painel abaixo dos pontos, sem capturar cliques
+        map.createPane('rhPane');
+        map.getPane('rhPane').style.zIndex = 350;
+        map.getPane('rhPane').style.pointerEvents = 'none';
+
+        const overlays = {};
+        if (window.RH_POLIGONOS) {
+            rhLayer = L.geoJSON(window.RH_POLIGONOS, {
+                pane: 'rhPane',
+                interactive: false,
+                smoothFactor: 0,   // desenhar todos os vértices (sem simplificação do Leaflet)
+                style: f => estiloRH(f.properties.rh.replace(/^PT/, ''))
+            }).addTo(map);
+
+            overlays['Regiões hidrográficas'] = rhLayer;
+        }
+
+        L.control.layers(basemaps, overlays, { position: 'bottomright' }).addTo(map);
+
+        document.getElementById('mapLegend').innerHTML = legendaMapaHtml();
+
+        markersLayer = L.layerGroup().addTo(map);
+        map.setView([38.3, -7.9], 8);
+
+        requestAnimationFrame(() => map.invalidateSize());
+    }
+
+    // Estilo da RH; com o filtro RH ativo, a RH escolhida fica realçada e a outra esbatida
+    function estiloRH(rh) {
+        const info = RH_INFO[rh] || { cor: '#64748b' };
+        const filtro = el.rhFilter.value;
+        const realce = filtro === 'all' ? 'normal' : (filtro === rh ? 'ativo' : 'inativo');
+        // só contorno: enchimento totalmente transparente
+        return {
+            color: info.cor,
+            weight: realce === 'ativo' ? 3 : 2,
+            opacity: realce === 'inativo' ? 0.35 : 0.9,
+            fill: false
+        };
+    }
+
+    function atualizarEstiloRH() {
+        if (!rhLayer) return;
+        rhLayer.eachLayer(layer => layer.setStyle(estiloRH(layer.feature.properties.rh.replace(/^PT/, ''))));
+    }
+
+    // Raio do ponto cresce com a capacidade (escala logarítmica: 0,4 hm³ ≈ 6 px, Alqueva ≈ 17 px)
+    function raioPorCapacidade(cap) {
+        return Math.min(18, 6 + 3 * Math.log10((cap || 0) + 1));
+    }
+
+    function rebuildMapPoints(lista, { enquadrar = true } = {}) {
+        initMap();
+
+        // lembrar o popup aberto para o reabrir depois de redesenhar
+        let popupAberto = null;
+        for (const [key, mk] of markerByKey) {
+            if (mk.isPopupOpen()) { popupAberto = key; break; }
+        }
+
+        markersLayer.clearLayers();
+        markerByKey.clear();
+
+        const bounds = [];
+
+        // maiores primeiro, para os pontos pequenos ficarem por cima
+        const ordenados = lista.filter(x => x.latLng).sort((a, b) => b.capacidadeHm3 - a.capacidadeHm3);
+
+        for (const item of ordenados) {
+            const { lat, lon } = item.latLng;
+            const raio = raioPorCapacidade(item.capacidadeHm3);
+
+            // desatualizadas: ponto esbatido com contorno tracejado
+            const point = L.circleMarker([lat, lon], {
+                radius: raio,
+                color: item.desatualizado ? "#b45309" : "#ffffff",
+                weight: item.desatualizado ? 2 : 1.5,
+                dashArray: item.desatualizado ? "3 3" : null,
+                fillColor: item.legenda.color,
+                fillOpacity: item.desatualizado ? 0.45 : 0.92
+            });
+
+            point.bindTooltip(`${escapeHtml(item.nome)} · ${percTexto(item)}`, {
+                direction: 'top',
+                offset: [0, -raio]
+            });
+            point.bindPopup(popupHtml(item), { maxWidth: 320 });
+            point.on('click', () => marcarAtivo(item.key, { scroll: true }));
+            point.addTo(markersLayer);
+
+            markerByKey.set(item.key, point);
+            bounds.push([lat, lon]);
+        }
+
+        if (enquadrar) {
+            if (bounds.length) {
+                map.fitBounds(bounds, { padding: [30, 30], maxZoom: 12 });
+            } else {
+                map.setView([38.3, -7.9], 8);
+            }
+        }
+
+        if (popupAberto && markerByKey.has(popupAberto)) {
+            markerByKey.get(popupAberto).openPopup();
+        }
+
+        requestAnimationFrame(() => map.invalidateSize());
+    }
+
+    function focusPoint(key) {
+        const m = markerByKey.get(key);
+        const item = dadosVisiveis.find(x => x.key === key);
+        if (!m || !item || !item.latLng) return;
+
+        // em ecrã estreito o mapa fica acima da lista: levar o utilizador até ele
+        if (window.matchMedia('(max-width: 992px)').matches) {
+            el.mapShell.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        map.setView([item.latLng.lat, item.latLng.lon], 12, { animate: true });
+        m.openPopup();
+    }
+
+    // ---------- Carregamento ----------
+
+    async function carregar() {
+        if (carregando) return;
+        carregando = true;
+
+        // primeira carga: skeleton e enquadrar o mapa; atualizações: manter o ecrã e o zoom
+        const primeiraCarga = dadosBase.length === 0;
+
+        try {
+            el.btnRefresh.disabled = true;
+            el.btnRefresh.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>A atualizar';
+
+            if (primeiraCarga) {
+                el.dashboard.classList.add('d-none');
+                el.loader.classList.remove('d-none');
+                criarSkeleton(6);
+            }
+
+            const res = await fetch(API_URL, { cache: 'no-store' });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+            const dados = await res.json();
+            if (!Array.isArray(dados)) throw new Error('Resposta inválida (esperado array)');
+
+            dadosBase = dados.map(normalizar);
+            preencherFiltroRH(dadosBase);
+            aplicarFiltros({ enquadrar: primeiraCarga });
+            updateFooter();
+
+        } catch (e) {
+            console.error(e);
+
+            if (!primeiraCarga) {
+                // manter os dados anteriores visíveis e avisar no cabeçalho
+                el.lastUpdate.classList.add('falha');
+                el.lastUpdate.innerHTML = `<i class="bi bi-exclamation-triangle"></i><span>Falha na atualização · dados de ${escapeHtml(ultimaAtualizacao || '—')}</span>`;
+                el.lastUpdate.title = String(e.message || e);
+                return;
+            }
+
+            el.lastUpdate.classList.add('falha');
+            el.lastUpdate.innerHTML = `<i class="bi bi-exclamation-triangle"></i><span>Erro ao carregar</span>`;
+            el.loader.classList.add('d-none');
+            el.dashboard.classList.remove('d-none');
+            el.dashboard.innerHTML = `
+                <div class="col-12">
+                    <div class="alert alert-danger rounded-4 border-0 shadow-sm">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi bi-exclamation-triangle-fill"></i>
+                            <div>
+                                <div class="fw-bold">Erro ao carregar dados</div>
+                                <div class="small">Verifica a API e tenta novamente.</div>
+                            </div>
+                        </div>
+                        <div class="small mt-2 text-muted">${escapeHtml(String(e.message || e))}</div>
+                    </div>
+                </div>
+            `;
+            el.kpiRow.innerHTML = '';
+            el.resultsInfo.textContent = 'Erro';
+        } finally {
+            el.btnRefresh.disabled = false;
+            el.btnRefresh.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Atualizar';
+            carregando = false;
+        }
+    }
+
+    function debounce(fn, ms = 150) {
+        let t = null;
+        return (...args) => {
+            clearTimeout(t);
+            t = setTimeout(() => fn(...args), ms);
+        };
+    }
+
+    el.searchInput.addEventListener('input', debounce(() => aplicarFiltros(), 180));
+    el.sortSelect.addEventListener('change', () => aplicarFiltros({ enquadrar: false }));
+    el.statusFilter.addEventListener('change', () => aplicarFiltros());
+    el.rhFilter.addEventListener('change', () => aplicarFiltros());
+    el.btnRefresh.addEventListener('click', carregar);
+
+    function setMapFullscreen(on) {
+        if (!el.mapShell) return;
+
+        el.mapShell.classList.toggle('is-fullscreen', on);
+        document.body.classList.toggle('no-scroll', on);
+
+        el.btnMapFullscreen.innerHTML = on
+            ? '<i class="bi bi-fullscreen-exit"></i>'
+            : '<i class="bi bi-arrows-fullscreen"></i>';
+
+        requestAnimationFrame(() => {
+            if (map) map.invalidateSize(true);
+        });
+    }
+
+    function toggleMapFullscreen() {
+        const on = !el.mapShell.classList.contains('is-fullscreen');
+        setMapFullscreen(on);
+    }
+
+    el.btnMapFullscreen.addEventListener('click', toggleMapFullscreen);
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && el.mapShell.classList.contains('is-fullscreen')) {
+            setMapFullscreen(false);
+        }
+    });
+
+    initMap();
+    criarSkeleton(6);
+    carregar();
+
+    window.addEventListener('resize', () => {
+        if (map) map.invalidateSize();
+    });
+
+    autoRefreshTimer = setInterval(() => {
+        if (!document.hidden) carregar();
+    }, AUTO_REFRESH_MS);
+
+    window.addEventListener('beforeunload', () => {
+        if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+    });
+</script>
+</body>
+</html>
